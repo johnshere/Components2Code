@@ -61,19 +61,15 @@ async function generateJson() {
   }
 
   try {
-    log('selection', selection);
-    const jsonData: any[] = [];
-    for (const node of selection) {
-      const nodeData = await nodeToJson(node);
-      if (nodeData) {
-        jsonData.push(nodeData);
-      }
-    }
-    log('json data', jsonData);
+    // log('selection', selection);
+    const jsonData = await nodeToJson(selection);
+    // log('json data', jsonData);
+
+    const componentData = filterComponentData(jsonData);
 
     figma.ui.postMessage({
       type: 'jsonResult',
-      data: jsonData.length === 1 ? jsonData[0] : jsonData,
+      data: componentData.length === 1 ? componentData[0] : componentData,
     });
   } catch (error: any) {
     figma.ui.postMessage({
@@ -83,65 +79,95 @@ async function generateJson() {
   }
 }
 
+// 过滤组件数据
+function filterComponentData(jsonData: NodeData[]) {
+  const componentData: NodeData[] = [];
+  // 不是组件，在子元素中有是组件的，升级保留
+  const upgradeComponentData: NodeData[] = [];
+  const len = jsonData ? jsonData.length : 0;
+  for (let i = 0; i < len; i++) {
+    let node = jsonData[i];
+    const children = filterComponentData(node.children || []);
+    if (
+      node.type === 'INSTANCE' ||
+      node.type === 'COMPONENT' ||
+      node.type === 'COMPONENT_SET'
+    ) {
+      node = { ...node, children };
+      componentData.push(node);
+    } else if (children.length > 0) {
+      upgradeComponentData.push(...children);
+    }
+  }
+  return [...componentData, ...upgradeComponentData];
+}
+
 interface NodeData {
   id: string;
   name: string;
-  type: string;
+  type: SceneNode['type'];
   visible: boolean;
   locked: boolean;
   description: string;
   componentId: string;
-  children: NodeData[];
+  children?: NodeData[];
 }
 
 // 将节点转换为JSON对象
-async function nodeToJson(node: SceneNode): Promise<NodeData | null> {
-  // log('node type', node.type);
-  const children = [];
-  for (const childNode of (node as any).children || []) {
-    const childJson = await nodeToJson(childNode);
-    if (childJson) {
-      children.push(childJson);
+async function nodeToJson(nodes: readonly SceneNode[]): Promise<NodeData[]> {
+  const jsonData: NodeData[] = [];
+  const len = nodes ? nodes.length : 0;
+  for (let i = 0; i < len; i++) {
+    const node = nodes[i];
+    const children = await nodeToJson((node as any).children);
+    const nodeData: NodeData = {
+      id: node.id,
+      name: node.name,
+      type: node.type,
+      visible: node.visible,
+      locked: node.locked,
+      description: '',
+      componentId: '',
+      children,
+    };
+
+    // 处理特定类型的节点
+    switch (node.type) {
+      case 'COMPONENT':
+      case 'COMPONENT_SET':
+      case 'INSTANCE':
+        // 处理组件特有属性
+        if (node.type === 'COMPONENT') {
+          log('is component', node.name);
+          const componentNode = node as ComponentNode;
+          nodeData.description = componentNode.description;
+        } else if (node.type === 'INSTANCE') {
+          log('is instance', node.name);
+          const componentNode = await node.getMainComponentAsync();
+          const instanceNode = componentNode as any;
+          nodeData.componentId = instanceNode?.componentId;
+          nodeData.mainComponent = instanceNode.mainComponent
+            ? {
+                id: instanceNode.mainComponent.id,
+                name: instanceNode.mainComponent.name,
+              }
+            : null;
+        }
+        jsonData.push(nodeData);
+        break;
+      default:
+        // log('is default', node.name);
+        // const shape = node as any
+        // if (shape.children) {
+        //   const children = await nodeToJson(shape.children);
+        //   log('children', children);
+        //   jsonData.push(...children)
+        // }
+        jsonData.push(nodeData);
+        break;
     }
   }
-  const nodeData = {
-    id: node.id,
-    name: node.name,
-    type: node.type,
-    visible: node.visible,
-    locked: node.locked,
-    description: '',
-    componentId: '',
-    children,
-  };
-
-  // 处理特定类型的节点
-  switch (node.type) {
-    case 'COMPONENT':
-    case 'COMPONENT_SET':
-    case 'INSTANCE':
-      // 处理组件特有属性
-      if (node.type === 'COMPONENT') {
-        log('is  component', node.name);
-        const componentNode = node as ComponentNode;
-        nodeData.description = componentNode.description;
-      } else if (node.type === 'INSTANCE') {
-        log('is  instance', node.name);
-        const componentNode = await node.getMainComponentAsync();
-        const instanceNode = componentNode as any;
-        nodeData.componentId = instanceNode?.componentId;
-        nodeData.mainComponent = instanceNode.mainComponent
-          ? {
-              id: instanceNode.mainComponent.id,
-              name: instanceNode.mainComponent.name,
-            }
-          : null;
-      }
-
-      return nodeData;
-    default:
-      return nodeData;
-  }
+  return jsonData;
 }
 
 // 初始化
