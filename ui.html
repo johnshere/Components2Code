@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Components2Code - Figma节点转JSON工具</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html {
+            height: 100%;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f5f5f5;
+            color: #333;
+            line-height: 1.6;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            height: 100%;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+
+        .header h1 {
+            font-size: 18px;
+            font-weight: 600;
+            color: #0d99ff;
+            margin-bottom: 8px;
+        }
+
+        .header p {
+            font-size: 12px;
+            color: #666;
+        }
+
+        .selection-info {
+            background: white;
+            border-radius: 6px;
+            border-top-left-radius: 0;
+            border-top-right-radius: 0;
+            padding: 6px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        }
+
+        .selection-count {
+            font-size: 14px;
+            font-weight: 600;
+            color: #333;
+        }
+
+        .node-types {
+            font-size: 12px;
+            color: #666;
+        }
+
+        .actions {
+            display: flex;
+            gap: 6px;
+            padding: 0 6px;
+        }
+
+        button {
+            flex: 1;
+            padding: 6px 6px;
+            border: none;
+            border-radius: 6px;
+            font-size: 13px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .btn-primary {
+            background: #0d99ff;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #0b85e0;
+        }
+
+        .btn-secondary {
+            background: #e5e5e5;
+            color: #333;
+        }
+
+        .btn-secondary:hover {
+            background: #d0d0d0;
+        }
+
+        .json-wrap {
+            background: white;
+            border-radius: 6px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+            flex-grow: 1;
+            min-height: 0;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .json-container {
+            padding: 6px;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .json-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .json-title {
+            font-size: 14px;
+            font-weight: 600;
+            color: #333;
+        }
+
+        .copy-btn {
+            background: #f0f0f0;
+            border: none;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+            cursor: pointer;
+            color: #666;
+            max-width: 120px;
+        }
+
+        .copy-btn:hover {
+            background: #e0e0e0;
+        }
+
+        .json-content {
+            font-family: 'Monaco', 'Consolas', monospace;
+            font-size: 11px;
+            border-radius: 4px;
+            white-space: pre-wrap;
+            word-break: break-all;
+            flex-grow: 1;
+            min-height: 0;
+            overflow: auto;
+
+            &::-webkit-scrollbar {
+                width: 6px;
+                height: 6px;
+            }
+
+            &::-webkit-scrollbar-thumb {
+                background: #ccc;
+                border-radius: 4px;
+            }
+
+            &::-webkit-scrollbar-thumb:hover {
+                background: #999;
+            }
+        }
+
+        .empty-state {
+            text-align: center;
+            color: #999;
+            font-size: 13px;
+            padding: 40px 20px;
+        }
+
+        .loading {
+            text-align: center;
+            color: #666;
+            font-size: 13px;
+            padding: 20px;
+        }
+
+        .error {
+            background: #fee;
+            color: #c33;
+            padding: 12px;
+            border-radius: 6px;
+            font-size: 12px;
+        }
+
+        .hidden {
+            display: none;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="selection-info">
+        <div class="selection-count" id="selectionCount">未选择节点</div>
+        <div class="node-types" id="nodeTypes">请选择一个或多个节点</div>
+    </div>
+
+    <div class="actions">
+        <button class="btn-primary" id="generateBtn" disabled>生成JSON</button>
+        <button class="btn-secondary" id="refreshBtn">刷新</button>
+    </div>
+    <div class="json-wrap hidden" id="jsonWrap">
+        <div class="json-container" id="jsonContainer">
+            <div class="json-header">
+                <div class="json-title">JSON数据</div>
+                <button class="copy-btn" id="copyBtn">复制</button>
+            </div>
+            <div class="json-content" id="jsonContent"></div>
+        </div>
+    </div>
+
+    <div class="empty-state" id="emptyState">
+        <div>👆</div>
+        <div>选择节点后点击"生成JSON"</div>
+    </div>
+
+    <div class="loading hidden" id="loading">
+        <div>🔄 正在生成JSON...</div>
+    </div>
+
+    <div class="error hidden" id="error"></div>
+
+    <script>
+        let currentJson = '';
+
+        // 初始化
+        window.onmessage = async (event) => {
+            const message = event.data.pluginMessage;
+            if (!message) {
+                showJsonResult({})
+            } else if (message.type === 'selectionUpdate') {
+                updateSelectionInfo(message.selection);
+            } else if (message.type === 'jsonResult') {
+                showJsonResult(message.data);
+            } else if (message.type === 'error') {
+                showError(message.error);
+            }
+        };
+
+        // 更新选择信息
+        function updateSelectionInfo(selection) {
+            const count = selection.length;
+            const countEl = document.getElementById('selectionCount');
+            const typesEl = document.getElementById('nodeTypes');
+            const generateBtn = document.getElementById('generateBtn');
+
+            if (count === 0) {
+                countEl.textContent = '未选择节点';
+                typesEl.textContent = '请选择一个或多个节点';
+                generateBtn.disabled = true;
+            } else {
+                countEl.textContent = `已选择 ${count} 个节点`;
+
+                // 统计节点类型
+                const typeCounts = {};
+                selection.forEach(node => {
+                    const type = node.type || '未知类型';
+                    typeCounts[type] = (typeCounts[type] || 0) + 1;
+                });
+
+                const typeStrings = Object.entries(typeCounts)
+                    .map(([type, count]) => `${type} x${count}`)
+                    .join(', ');
+
+                typesEl.textContent = typeStrings;
+                generateBtn.disabled = false;
+            }
+        }
+
+        // 生成JSON
+        document.getElementById('generateBtn').addEventListener('click', () => {
+            showLoading();
+            parent.postMessage({ pluginMessage: { type: 'generateJson' } }, '*');
+        });
+
+        // 刷新
+        document.getElementById('refreshBtn').addEventListener('click', () => {
+            parent.postMessage({ pluginMessage: { type: 'refresh' } }, '*');
+        });
+
+        // 复制到剪贴板
+        document.getElementById('copyBtn').addEventListener('click', async () => {
+            try {
+                await navigator.clipboard.writeText(currentJson);
+                const btn = document.getElementById('copyBtn');
+                const originalText = btn.textContent;
+                btn.textContent = '已复制!';
+                setTimeout(() => {
+                    btn.textContent = originalText;
+                }, 1000);
+            } catch (err) {
+                console.error('复制失败:', err);
+                showError('复制到剪贴板失败');
+            }
+        });
+
+        function showLoading() {
+            document.getElementById('loading').classList.remove('hidden');
+            document.getElementById('jsonWrap').classList.add('hidden');
+            document.getElementById('emptyState').classList.add('hidden');
+            document.getElementById('error').classList.add('hidden');
+        }
+
+        function showJsonResult(data) {
+            document.getElementById('loading').classList.add('hidden');
+            document.getElementById('jsonWrap').classList.remove('hidden');
+            document.getElementById('emptyState').classList.add('hidden');
+
+            currentJson = JSON.stringify(data, null, 2);
+            document.getElementById('jsonContent').textContent = currentJson;
+        }
+
+        function showError(message) {
+            document.getElementById('loading').classList.add('hidden');
+            document.getElementById('error').textContent = message;
+            document.getElementById('error').classList.remove('hidden');
+        }
+
+        // 初始化时请求当前选择
+        parent.postMessage({ pluginMessage: { type: 'init' } }, '*');
+    </script>
+</body>
+
+</html>
