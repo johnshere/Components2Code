@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Components2Code - Figma节点转JSON工具</title>
+    <title>Components2Code</title>
     <style>
         * {
             margin: 0;
@@ -108,7 +108,7 @@
             background: #d0d0d0;
         }
 
-        .json-wrap {
+        .data-wrap {
             background: white;
             border-radius: 6px;
             box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
@@ -118,7 +118,7 @@
             flex-direction: column;
         }
 
-        .json-container {
+        .data-container {
             padding: 4px;
             height: 100%;
             display: flex;
@@ -126,13 +126,13 @@
             gap: 4px;
         }
 
-        .json-header {
+        .data-header {
             display: flex;
             justify-content: space-between;
             align-items: center;
         }
 
-        .json-title {
+        .data-title {
             font-size: 14px;
             font-weight: 600;
             color: #333;
@@ -153,7 +153,7 @@
             background: #e0e0e0;
         }
 
-        .json-content {
+        .data-content {
             font-family: 'Monaco', 'Consolas', monospace;
             font-size: 11px;
             border-radius: 4px;
@@ -216,32 +216,32 @@
     <div class="actions">
         <span>prefix:</span>
         <input type="text" id="prefixInput" class="prefix-input">
-        <button class="btn-primary" id="generateBtn" disabled>生成JSON</button>
+        <button class="btn-primary" id="generateBtn" disabled>生成数据</button>
         <button class="btn-secondary" id="refreshBtn">刷新</button>
     </div>
-    <div class="json-wrap hidden" id="jsonWrap">
-        <div class="json-container" id="jsonContainer">
-            <div class="json-header">
-                <div class="json-title">JSON数据</div>
+    <div class="data-wrap hidden" id="dataWrap">
+        <div class="data-container" id="dataContainer">
+            <div class="data-header">
+                <div class="data-title">数据</div>
                 <button class="copy-btn" id="copyBtn">复制</button>
             </div>
-            <div class="json-content" id="jsonContent"></div>
+            <div class="data-content" id="dataContent"></div>
         </div>
     </div>
 
     <div class="empty-state" id="emptyState">
         <div>👆</div>
-        <div>选择节点后点击"生成JSON"</div>
+        <div>选择节点后点击"生成数据"</div>
     </div>
 
     <div class="loading hidden" id="loading">
-        <div>🔄 正在生成JSON...</div>
+        <div>🔄 正在生成数据...</div>
     </div>
 
     <div class="error hidden" id="error"></div>
 
     <script>
-        let currentJson = '';
+        let currentData = '';
 
         // 初始化
         window.onmessage = async (event) => {
@@ -250,8 +250,9 @@
                 return
             } else if (message.type === 'selectionUpdate') {
                 updateSelectionInfo(message.selection);
-            } else if (message.type === 'jsonResult') {
-                showJsonResult(message.data);
+            } else if (message.type === 'dataResult') {
+                currentData = message.data;
+                showDataResult(message.data);
             } else if (message.type === 'error') {
                 showError(message.error);
             }
@@ -287,10 +288,11 @@
             }
         }
 
-        // 生成JSON
+        // 生成数据
         document.getElementById('generateBtn').addEventListener('click', () => {
             showLoading();
-            parent.postMessage({ pluginMessage: { type: 'generateJson' } }, '*');
+            const prefix = document.getElementById('prefixInput').value;
+            parent.postMessage({ pluginMessage: { type: 'generateData', prefix } }, '*');
         });
 
         // 刷新
@@ -301,7 +303,7 @@
         // 复制到剪贴板
         document.getElementById('copyBtn').addEventListener('click', async () => {
             try {
-                await navigator.clipboard.writeText(currentJson);
+                await navigator.clipboard.writeText(currentData);
                 const btn = document.getElementById('copyBtn');
                 const originalText = btn.textContent;
                 btn.textContent = '已复制!';
@@ -310,24 +312,23 @@
                 }, 1000);
             } catch (err) {
                 console.error('复制失败:', err);
-                showError('复制到剪贴板失败');
+                showError('复制到剪贴板失败: ' + (err.message || err));
             }
         });
 
         function showLoading() {
             document.getElementById('loading').classList.remove('hidden');
-            document.getElementById('jsonWrap').classList.add('hidden');
+            document.getElementById('dataWrap').classList.add('hidden');
             document.getElementById('emptyState').classList.add('hidden');
             document.getElementById('error').classList.add('hidden');
         }
 
-        function showJsonResult(data) {
+        function showDataResult() {
             document.getElementById('loading').classList.add('hidden');
-            document.getElementById('jsonWrap').classList.remove('hidden');
+            document.getElementById('dataWrap').classList.remove('hidden');
             document.getElementById('emptyState').classList.add('hidden');
 
-            currentJson = JSON.stringify(data, null, 2);
-            document.getElementById('jsonContent').textContent = currentJson;
+            document.getElementById('dataContent').textContent = currentData;
         }
 
         function showError(message) {
