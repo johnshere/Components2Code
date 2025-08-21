@@ -214,8 +214,6 @@
     </div>
 
     <div class="actions">
-        <span>prefix:</span>
-        <input type="text" id="prefixInput" class="prefix-input">
         <button class="btn-primary" id="generateBtn" disabled>生成数据</button>
         <button class="btn-secondary" id="refreshBtn">刷新</button>
     </div>
@@ -291,8 +289,7 @@
         // 生成数据
         document.getElementById('generateBtn').addEventListener('click', () => {
             showLoading();
-            const prefix = document.getElementById('prefixInput').value;
-            parent.postMessage({ pluginMessage: { type: 'generateData', prefix } }, '*');
+            parent.postMessage({ pluginMessage: { type: 'generateData' } }, '*');
         });
 
         // 刷新
@@ -303,7 +300,20 @@
         // 复制到剪贴板
         document.getElementById('copyBtn').addEventListener('click', async () => {
             try {
-                await navigator.clipboard.writeText(currentData);
+                var copyStr = `<template>\n${currentData}\n<\/template>\n<script lang="ts" setup><\/script>\n`;
+                // 检查 clipboard API 是否可用
+                if (navigator.clipboard && navigator.clipboard.writeText) {
+                    await navigator.clipboard.writeText(copyStr);
+                } else {
+                    // 降级处理：使用传统的 execCommand 方法
+                    const textArea = document.createElement('textarea');
+                    textArea.value = copyStr;
+                    document.body.appendChild(textArea);
+                    textArea.select();
+                    document.execCommand('copy');
+                    document.body.removeChild(textArea);
+                }
+
                 const btn = document.getElementById('copyBtn');
                 const originalText = btn.textContent;
                 btn.textContent = '已复制!';
